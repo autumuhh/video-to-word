@@ -2,6 +2,8 @@
 
 > **"别只是‘看’完视频，把它‘变成’你的知识库。"**
 
+![Video2Word Demo](assets/demo.png)
+
 Video2Word 是一个基于 **AI 多模态大模型 (Gemini/GPT-4o)** 的智能工具，能够自动观看视频、提取关键帧（PPT/板书）、分析内容，并最终生成一份**排版精美、图文并茂的学术级 Word 笔记**。
 
 ## 🌟 核心亮点 (Key Features)
