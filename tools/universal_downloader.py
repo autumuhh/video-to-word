@@ -7,9 +7,18 @@ from playwright.sync_api import sync_playwright
 # Ensure stdout is utf-8
 sys.stdout.reconfigure(encoding='utf-8')
 
+def get_referer(url):
+    if "douyin.com" in url:
+        return "https://www.douyin.com/"
+    if "bilibili.com" in url:
+        return "https://www.bilibili.com/"
+    return None
+
 def download_video(url, output_path):
     print(f"Starting separate process download (SYNC) for: {url}", flush=True)
-    metadata = {"title": "Douyin_Video", "duration": 0, "uploader": "Unknown"}
+    metadata = {"title": "Web_Video", "duration": 0, "uploader": "Unknown"}
+    
+    referer = get_referer(url)
     
     with sync_playwright() as p:
         print("Launching browser...", flush=True)
@@ -38,7 +47,7 @@ def download_video(url, output_path):
 
             video_src = None
             
-            # Strategy 1
+            # Strategy 1: Find video tag
             try:
                 video_element = page.wait_for_selector('video', state="attached", timeout=8000)
                 if video_element:
@@ -50,27 +59,30 @@ def download_video(url, output_path):
             except:
                 pass
 
-            # Strategy 2
-            if not video_src:
+            # Strategy 2: JS Eval
+            if not video_src or video_src.startswith('blob:'):
                 video_src = page.evaluate("""() => {
                     const video = document.querySelector('video');
-                    if (video) return video.src;
+                    if (video && video.src && !video.src.startsWith('blob:')) return video.src;
                     const sources = document.querySelectorAll('source');
                     for (const s of sources) {
-                        if (s.src && s.src.includes('http')) return s.src;
+                        if (s.src && s.src.includes('http') && !s.src.startswith('blob:')) return s.src;
                     }
                     return null;
                 }""")
 
             if not video_src:
-                print("VIDEO_NOT_FOUND")
+                print("VIDEO_NOT_FOUND_OR_BLOB")
+                # If it's Bilibili or similar, it might be using DASH/HLS which shows as blob.
+                # In such cases, we might need a more specialized extractor or just rely on yt-dlp 
+                # but with better headers/cookies.
                 return
 
             print(f"Video Source Found: {video_src[:50]}...", flush=True)
             
             # Get Title
             try:
-                title_el = page.query_selector('h1') or page.query_selector('.video-info-title')
+                title_el = page.query_selector('h1') or page.query_selector('.video-info-title') or page.query_selector('.video-title')
                 if title_el:
                     metadata["title"] = title_el.inner_text()[:50]
             except:
@@ -78,9 +90,10 @@ def download_video(url, output_path):
 
             # Download
             headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Referer": "https://www.douyin.com/"
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
             }
+            if referer:
+                headers["Referer"] = referer
             
             r = requests.get(video_src, headers=headers, stream=True)
             if r.status_code == 200:
@@ -89,7 +102,6 @@ def download_video(url, output_path):
                         if chunk:
                             f.write(chunk)
                 
-                # Output result as JSON to stdout for the caller to parse
                 result = {
                     "status": "success",
                     "path": output_path,
@@ -105,6 +117,9 @@ def download_video(url, output_path):
             browser.close()
 
 if __name__ == "__main__":
+    if len(sys.argv) < 3:
+        print("Usage: python universal_downloader.py <url> <output_path>")
+        sys.exit(1)
     url = sys.argv[1]
     output_path = sys.argv[2]
     download_video(url, output_path)

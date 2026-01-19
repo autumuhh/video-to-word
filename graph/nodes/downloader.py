@@ -14,7 +14,7 @@ def download_with_playwright(url: str, output_path: str) -> dict:
     Fallback downloader using a separate process for Playwright.
     This avoids asyncio loop conflicts with Streamlit/Tornado on Windows.
     """
-    script_path = os.path.join(os.getcwd(), "tools", "douyin_downloader.py")
+    script_path = os.path.join(os.getcwd(), "tools", "universal_downloader.py")
     
     # Run the separate script
     try:
@@ -60,6 +60,24 @@ def clean_douyin_url(url: str) -> str:
             return f"https://www.douyin.com/video/{video_id}"
     return url
 
+def get_ydl_opts(url, output_template):
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    }
+    
+    if "douyin.com" in url:
+        headers['Referer'] = 'https://www.douyin.com/'
+    elif "bilibili.com" in url:
+        headers['Referer'] = 'https://www.bilibili.com/'
+        
+    return {
+        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
+        'outtmpl': output_template,
+        'quiet': True,
+        'no_warnings': True,
+        'http_headers': headers
+    }
+
 def download_video(state: AgentState) -> AgentState:
     """
     Downloads video from the input URL using yt-dlp.
@@ -78,17 +96,7 @@ def download_video(state: AgentState) -> AgentState:
     # Template for output filename
     output_template = os.path.join(temp_dir, '%(title)s.%(ext)s')
     
-    ydl_opts = {
-        'format': 'bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best',
-        'outtmpl': output_template,
-        'quiet': True,
-        'no_warnings': True,
-        # Add headers to avoid basic bot detection
-        'http_headers': {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Referer': 'https://www.douyin.com/',
-        }
-    }
+    ydl_opts = get_ydl_opts(url, output_template)
 
     try:
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -106,10 +114,13 @@ def download_video(state: AgentState) -> AgentState:
             }
     except Exception as e:
         error_msg = str(e)
-        # Check if it's a Douyin cookie issue, try Playwright fallback
-        if "douyin" in url and ("cookie" in error_msg.lower() or "403" in error_msg):
+        # Check if it's a cookie or 403 issue, try Playwright fallback for Douyin and Bilibili
+        is_retryable = any(x in url for x in ["douyin", "bilibili"]) and \
+                       any(x in error_msg.lower() for x in ["cookie", "403", "forbidden"])
+        
+        if is_retryable:
             try:
-                fallback_filename = os.path.join(temp_dir, f"douyin_fallback_{int(time.time())}.mp4")
+                fallback_filename = os.path.join(temp_dir, f"fallback_{int(time.time())}.mp4")
                 metadata = download_with_playwright(url, fallback_filename)
                 
                 return {

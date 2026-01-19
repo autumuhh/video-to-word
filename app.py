@@ -5,7 +5,7 @@ import asyncio
 import re
 import streamlit as st
 from dotenv import load_dotenv
-from duckduckgo_search import DDGS
+from ddgs import DDGS
 from graph.graph_builder import build_graph
 
 # Fix for Playwright on Windows
