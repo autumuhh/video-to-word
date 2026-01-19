@@ -1,4 +1,4 @@
-# 🎬 Video2Word Agent (视频转文档智能体)
+# 🎬 Video2Word Agent (视频转Word文档智能体)
 
 > **"别只是‘看’完视频，把它‘变成’你的知识库。"**
 
